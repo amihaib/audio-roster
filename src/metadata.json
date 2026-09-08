@@ -1,0 +1,11 @@
+{
+    "uuid": "audio-roster@amihaitech",
+    "name": "Audio Roster",
+    "description": "Hide and rename audio output and input devices in the Quick Settings device lists. Switching stays native: the arrow next to the volume slider opens the cleaned-up list.",
+    "shell-version": [
+        "50"
+    ],
+    "settings-schema": "org.gnome.shell.extensions.audio-roster",
+    "url": "https://github.com/amihaib/audio-roster",
+    "version-name": "0.1.0"
+}

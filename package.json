@@ -1,0 +1,6 @@
+{
+    "name": "audio-roster",
+    "private": true,
+    "type": "module",
+    "description": "GNOME Shell 50 extension: hide and rename audio devices in Quick Settings"
+}
