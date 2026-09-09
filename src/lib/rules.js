@@ -17,13 +17,14 @@
 
 import GLib from 'gi://GLib';
 
-// Typed access to the extension's four GSettings keys. Every write compares first
-// so that re-enabling with unchanged devices performs no dconf writes at all.
+// Typed access to the extension's GSettings keys. Every write compares first so that
+// re-enabling with unchanged devices performs no dconf writes at all.
 
 export const HIDDEN_KEY = 'hidden-devices';
 export const NAMES_KEY = 'device-names';
 export const KNOWN_KEY = 'known-devices';
 export const PRESENT_KEY = 'present-devices';
+export const ALWAYS_SHOW_INPUT_KEY = 'always-show-input';
 
 export class Rules {
     constructor(settings) {
@@ -54,6 +55,10 @@ export class Rules {
 
     present() {
         return new Set(this._settings.get_strv(PRESENT_KEY));
+    }
+
+    alwaysShowInput() {
+        return this._settings.get_boolean(ALWAYS_SHOW_INPUT_KEY);
     }
 
     // --- writes used by preferences ---
@@ -105,6 +110,12 @@ export class Rules {
         this._setDict(KNOWN_KEY, known);
     }
 
+    setAlwaysShowInput(value) {
+        if (this._settings.get_boolean(ALWAYS_SHOW_INPUT_KEY) === value)
+            return;
+        this._settings.set_boolean(ALWAYS_SHOW_INPUT_KEY, value);
+    }
+
     setPresent(keys) {
         const next = [...new Set(keys)].sort();
         const current = [...this._settings.get_strv(PRESENT_KEY)].sort();
@@ -117,7 +128,7 @@ export class Rules {
     // --- signals ---
 
     onRulesChanged(callback) {
-        return this._connect([HIDDEN_KEY, NAMES_KEY], callback);
+        return this._connect([HIDDEN_KEY, NAMES_KEY, ALWAYS_SHOW_INPUT_KEY], callback);
     }
 
     onRegistryChanged(callback) {

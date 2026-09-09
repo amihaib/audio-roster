@@ -1,7 +1,7 @@
 {
     "uuid": "audio-roster@amihaitech",
     "name": "Audio Roster",
-    "description": "Hide and rename audio output and input devices in the Quick Settings device lists. Switching stays native: the arrow next to the volume slider opens the cleaned-up list.",
+    "description": "Hide and rename audio output and input devices in the Quick Settings device lists. Switching stays native: the arrow next to the volume slider opens the cleaned-up list. The microphone slider can be kept visible instead of appearing only while an app is recording.",
     "shell-version": [
         "50"
     ],

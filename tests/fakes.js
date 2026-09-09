@@ -160,6 +160,9 @@ export class FakeSlider {
         this._deviceItems = new Map();
         this._deviceSection = new FakeSection();
         this.menuEnabled = false;
+        this.visible = false;
+        // GNOME hides a slider that has no stream at all; every fake slider has one.
+        this._stream = {};
         this.syncCount = 0;
     }
 
@@ -201,8 +204,13 @@ export class FakeSlider {
             item.setOrnament(id === activeId ? ORNAMENT_CHECK : ORNAMENT_NONE);
     }
 
+    _shouldBeVisible() {
+        return this._stream != null;
+    }
+
     _sync() {
         this.syncCount++;
+        this.visible = this._shouldBeVisible();
         this.menuEnabled = this._deviceItems.size > 1;
     }
 
@@ -224,8 +232,25 @@ export class FakeOutputSlider extends FakeSlider {
     }
 }
 
+// Mirrors InputStreamSlider, which owns a _shouldBeVisible of its own: the slider
+// is shown only while an application is recording.
 export class FakeInputSlider extends FakeSlider {
+    constructor(control) {
+        super(control);
+        this._showInput = false;
+    }
+
     _lookupDevice(id) {
         return this._control.lookup_input_id(id);
+    }
+
+    _shouldBeVisible() {
+        return super._shouldBeVisible() && this._showInput;
+    }
+
+    // Mirrors _maybeShowInput(): an application started or stopped recording.
+    setRecording(recording) {
+        this._showInput = recording;
+        this._sync();
     }
 }

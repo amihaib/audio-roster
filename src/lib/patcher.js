@@ -57,6 +57,11 @@ export class SliderPatcher {
         this._activeIds = new Map();
         this._proto = null;
         this._saved = null; // original property descriptors {add, remove, setActive}
+        // The input slider's own prototype, patched separately so the always-show
+        // rule can never reach an output slider. Null when GNOME's layout does not
+        // allow it (see _installInputVisibility).
+        this._inputProto = null;
+        this._savedShouldBeVisible = null;
         this._originalAdd = null;
         this._originalRemove = null;
         this._originalSetActive = null;
@@ -95,6 +100,8 @@ export class SliderPatcher {
         Object.defineProperty(this._proto, '_removeDevice', this._saved.remove);
         if (this._saved.setActive)
             Object.defineProperty(this._proto, '_setActiveDevice', this._saved.setActive);
+        if (this._savedShouldBeVisible)
+            Object.defineProperty(this._inputProto, '_shouldBeVisible', this._savedShouldBeVisible);
 
         try {
             if (this._rulesHandle)
@@ -127,8 +134,10 @@ export class SliderPatcher {
         for (const slider of this._sliders) {
             try {
                 this._keepSorted(slider);
+                // Recomputes visibility, which is GNOME's own rule again by now.
+                slider._sync();
             } catch (e) {
-                this._logger.error(`audio-roster: could not restore device order: ${e}`);
+                this._logger.error(`audio-roster: could not restore a slider: ${e}`);
             }
         }
 
@@ -144,6 +153,8 @@ export class SliderPatcher {
         this._menuEntry = null;
         this._proto = null;
         this._saved = null;
+        this._inputProto = null;
+        this._savedShouldBeVisible = null;
         this._originalAdd = null;
         this._originalRemove = null;
         this._originalSetActive = null;
@@ -177,7 +188,7 @@ export class SliderPatcher {
         this._sliders = [output, input];
 
         try {
-            this._installWrappers();
+            this._installWrappers(input);
             // The panel's own sliders are not optional: if either one cannot be taken
             // over, roll the whole attach back rather than run half-patched. Every
             // further slider is someone else's and is merely dropped when it fails.
@@ -343,8 +354,13 @@ export class SliderPatcher {
                 continue; // already logged; do not touch it twice
             try {
                 this._keepSorted(slider);
+                // GNOME recomputes visibility in _sync(), which it calls on every
+                // device change. A rules change is the one moment nothing calls it,
+                // so the always-show-input setting would not take effect until the
+                // next device appeared.
+                slider._sync();
             } catch (e) {
-                this._logger.error(`audio-roster: could not order the devices of a slider, dropping it: ${e}`);
+                this._logger.error(`audio-roster: could not update a slider, dropping it: ${e}`);
                 dead.add(slider);
             }
         }
@@ -366,7 +382,7 @@ export class SliderPatcher {
         }
     }
 
-    _installWrappers() {
+    _installWrappers(input) {
         const patcher = this;
         const originalAdd = this._originalAdd;
         const originalRemove = this._originalRemove;
@@ -395,6 +411,8 @@ export class SliderPatcher {
             },
         });
 
+        this._installInputVisibility(input);
+
         // GNOME 50's StreamSlider owns _setActiveDevice. If a future version moves it
         // elsewhere, give up the check-mark restoration instead of the extension.
         if (!Object.hasOwn(this._proto, '_setActiveDevice')) {
@@ -417,6 +435,51 @@ export class SliderPatcher {
                     patcher._logger.error(`audio-roster: could not record the active device: ${e}`);
                 }
                 originalSetActive.call(this, id);
+            },
+        });
+    }
+
+    // GNOME shows the microphone slider only while an application is recording
+    // (InputStreamSlider._maybeShowInput). With `always-show-input` on we widen that
+    // to "there is still a microphone to choose", which is exactly _deviceItems.size:
+    // a hidden device never gets an item, so hiding every microphone hides the slider
+    // again.
+    //
+    // InputStreamSlider owns its own _shouldBeVisible. Patching that prototype and not
+    // the shared one is what keeps the output sliders out of it, so refuse unless the
+    // owner really is below the shared prototype -- if a future GNOME moves the method
+    // up, give up the feature rather than make every slider always visible.
+    _installInputVisibility(input) {
+        const inputProto = findOwner(input, '_shouldBeVisible');
+        const descriptor = inputProto
+            ? Object.getOwnPropertyDescriptor(inputProto, '_shouldBeVisible')
+            : null;
+
+        if (!inputProto || !this._proto.isPrototypeOf(inputProto) ||
+            typeof descriptor?.value !== 'function') {
+            this._logger.warn('audio-roster: the input slider does not own _shouldBeVisible; ' +
+                'the microphone slider will only show while an app is recording');
+            return;
+        }
+
+        this._inputProto = inputProto;
+        this._savedShouldBeVisible = descriptor;
+        const original = descriptor.value;
+        const patcher = this;
+
+        Object.defineProperty(inputProto, '_shouldBeVisible', {
+            ...descriptor,
+            value: function () {
+                try {
+                    // No stream means there is nothing for the slider to control, so
+                    // GNOME's answer stands even with the setting on.
+                    if (patcher._rules.alwaysShowInput() &&
+                        this._stream != null && this._deviceItems.size > 0)
+                        return true;
+                } catch (e) {
+                    patcher._logger.error(`audio-roster: _shouldBeVisible failed, using GNOME's: ${e}`);
+                }
+                return original.call(this);
             },
         });
     }

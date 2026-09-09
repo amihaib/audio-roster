@@ -14,6 +14,11 @@
       <default>{}</default>
       <summary>Original label per device key for every device ever seen (maintained by the extension)</summary>
     </key>
+    <key name="always-show-input" type="b">
+      <default>true</default>
+      <summary>Keep the microphone slider visible whenever a microphone is not hidden</summary>
+      <description>GNOME shows the microphone slider only while an application is recording. With this on it stays visible as long as at least one microphone is switched on here.</description>
+    </key>
     <key name="present-devices" type="as">
       <default>[]</default>
       <summary>Device keys currently available, sorted (maintained by the extension)</summary>

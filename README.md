@@ -14,6 +14,9 @@ Quick Settings Audio Panel.
   Controller" can just be "Speakers").
 - Rules are keyed to the sound card and port, not to the display label, so they
   survive a language change or a Bluetooth profile switch.
+- Keep the microphone slider in Quick Settings instead of letting GNOME show it
+  only while an app happens to be recording, so switching microphone is always one
+  click away.
 - Nothing is disabled at the system level: devices stay available everywhere else,
   they are just hidden from this one list.
 
@@ -46,6 +49,11 @@ Extensions app). Outputs and Inputs each list every device GNOME has seen:
   original name);
 - devices marked "Not connected" can be forgotten; a connected one simply
   reappears, so forget is only offered while it is disconnected.
+
+The Inputs page also has **Always show it in Quick Settings**. GNOME normally shows
+the microphone slider only while an application is recording; with this on it stays
+visible as long as at least one microphone is switched on, and disappears again when
+they are all hidden. Turn it off to get GNOME's behaviour back.
 
 Connect a Bluetooth or USB device once so it appears in the list, then configure it.
 

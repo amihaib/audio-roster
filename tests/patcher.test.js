@@ -24,12 +24,18 @@ const PRISTINE = {
     add: Object.getOwnPropertyDescriptor(FakeSlider.prototype, '_addDevice'),
     remove: Object.getOwnPropertyDescriptor(FakeSlider.prototype, '_removeDevice'),
     setActive: Object.getOwnPropertyDescriptor(FakeSlider.prototype, '_setActiveDevice'),
+    // Patched on the input prototype only, like GNOME's InputStreamSlider.
+    shouldBeVisible: Object.getOwnPropertyDescriptor(FakeInputSlider.prototype, '_shouldBeVisible'),
+    // The shared one, which must never be touched: the output sliders inherit it.
+    baseShouldBeVisible: Object.getOwnPropertyDescriptor(FakeSlider.prototype, '_shouldBeVisible'),
 };
 
 export function restorePrototype() {
     Object.defineProperty(FakeSlider.prototype, '_addDevice', PRISTINE.add);
     Object.defineProperty(FakeSlider.prototype, '_removeDevice', PRISTINE.remove);
     Object.defineProperty(FakeSlider.prototype, '_setActiveDevice', PRISTINE.setActive);
+    Object.defineProperty(FakeInputSlider.prototype, '_shouldBeVisible', PRISTINE.shouldBeVisible);
+    Object.defineProperty(FakeSlider.prototype, '_shouldBeVisible', PRISTINE.baseShouldBeVisible);
 }
 
 export function ptest(name, fn) {
@@ -436,6 +442,12 @@ ptest('a prototype without _setActiveDevice is patched anyway, with a warning', 
         _lookupDevice(id) {
             return this._control.lookup_input_id(id);
         }
+
+        // Owned here like GNOME's InputStreamSlider, so this test is about
+        // _setActiveDevice alone.
+        _shouldBeVisible() {
+            return super._shouldBeVisible() && this._showInput;
+        }
     }
     assert(!Object.hasOwn(BareSlider.prototype, '_setActiveDevice'), 'the test prototype does not own it');
     const barePristineAdd = BareSlider.prototype._addDevice;
@@ -840,4 +852,100 @@ ptest('a menu entry that cannot be removed does not stop detach', () => {
     assertDeepEqual(output2.visibleLabels(), [HDMI_LABEL, LINE_OUT_LABEL], 'and every other slider is');
     assertEqual(FakeSlider.prototype._addDevice, PRISTINE.add.value, 'the prototype is un-patched');
     assertEqual(patcher.attached, false);
+});
+
+// --- the microphone slider ---------------------------------------------------
+// GNOME shows it only while an app is recording (InputStreamSlider._maybeShowInput),
+// so the device list behind it is unreachable the rest of the time.
+
+ptest('the microphone slider stays visible with a microphone left to choose', () => {
+    const {output, input, patcher} = setup();
+    assertEqual(input.visible, false, 'GNOME hides it while nothing is recording');
+
+    patcher.attach({output, input});
+
+    assertEqual(input.visible, true);
+    assertEqual(input._showInput, false, 'still nothing recording; GNOME’s own flag is untouched');
+    assertDeepEqual(input.visibleLabels(), [MIC_LABEL]);
+});
+
+ptest('hiding every microphone hides the slider again', () => {
+    const {rules, output, input, patcher} = setup();
+    patcher.attach({output, input});
+    assertEqual(input.visible, true);
+
+    rules.setHidden(MIC_KEY, true);
+    flush();
+    assertEqual(input.visible, false, 'nothing left to choose');
+    assertDeepEqual(input.visibleLabels(), []);
+
+    rules.setHidden(MIC_KEY, false);
+    flush();
+    assertEqual(input.visible, true);
+});
+
+ptest('with the setting off GNOME’s recording rule stands', () => {
+    const {rules, output, input, patcher} = setup({
+        configure: r => r.setAlwaysShowInput(false),
+    });
+    patcher.attach({output, input});
+
+    assertEqual(input.visible, false);
+
+    input.setRecording(true);
+    assertEqual(input.visible, true, 'GNOME still shows it while recording');
+
+    // Turning the setting on takes effect without waiting for a device change.
+    input.setRecording(false);
+    rules.setAlwaysShowInput(true);
+    flush();
+    assertEqual(input.visible, true);
+});
+
+ptest('the always-show rule never reaches an output slider', () => {
+    const {output, input, patcher} = setup();
+    patcher.attach({output, input});
+
+    assertEqual(FakeSlider.prototype._shouldBeVisible, PRISTINE.baseShouldBeVisible.value,
+        'the shared prototype is untouched');
+
+    output._stream = null;
+    output._sync();
+    assertEqual(output.visible, false, 'an output slider with no stream is still hidden');
+});
+
+ptest('detach gives the microphone slider back to GNOME', () => {
+    const {output, input, patcher} = setup();
+    patcher.attach({output, input});
+    assertEqual(input.visible, true);
+
+    patcher.detach();
+
+    assertEqual(input.visible, false, 'hidden again, nothing is recording');
+    assertEqual(FakeInputSlider.prototype._shouldBeVisible, PRISTINE.shouldBeVisible.value,
+        'the input prototype is un-patched');
+    assertDeepEqual(input.visibleLabels(), [MIC_LABEL], 'and its device is still there');
+});
+
+ptest('an input prototype that does not own _shouldBeVisible is left alone', () => {
+    // If a future GNOME moves the method onto the shared prototype, patching it would
+    // make every output slider always visible too. Give the feature up instead.
+    class PlainInput extends FakeSlider {
+        _lookupDevice(id) {
+            return this._control.lookup_input_id(id);
+        }
+    }
+    const {output, input, patcher, logger} = setup({
+        sliders: {output: FakeOutputSlider, input: PlainInput},
+    });
+    patcher.attach({output, input});
+
+    assertEqual(patcher.attached, true, 'hiding and renaming still work');
+    assertEqual(logger.errors.length, 0);
+    assertEqual(logger.warnings.length, 1);
+    assert(logger.warnings[0].includes('_shouldBeVisible'), logger.warnings[0]);
+    assertEqual(FakeSlider.prototype._shouldBeVisible, PRISTINE.baseShouldBeVisible.value,
+        'the shared prototype is untouched');
+    assertEqual(input.visible, true, 'a plain slider has no recording rule to obey');
+    assertDeepEqual(input.visibleLabels(), [MIC_LABEL]);
 });

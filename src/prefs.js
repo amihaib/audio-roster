@@ -38,6 +38,7 @@ export default class QsAudioDevicesPreferences extends ExtensionPreferences {
                 title: 'Inputs',
                 iconName: 'audio-input-microphone-symbolic',
                 groupTitle: 'Input devices',
+                topGroup: buildMicrophoneGroup(rules),
             }),
         ];
         for (const page of pages)
@@ -53,13 +54,29 @@ export default class QsAudioDevicesPreferences extends ExtensionPreferences {
     }
 }
 
+// GNOME shows the microphone slider only while an app is recording, which makes
+// switching microphone impossible the rest of the time.
+function buildMicrophoneGroup(rules) {
+    const group = new Adw.PreferencesGroup({title: 'Microphone slider'});
+    const row = new Adw.SwitchRow({
+        title: 'Always show it in Quick Settings',
+        subtitle: 'Otherwise GNOME shows it only while an app is recording. It stays hidden when every microphone below is switched off.',
+        active: rules.alwaysShowInput(),
+    });
+    row.connect('notify::active', () => rules.setAlwaysShowInput(row.active));
+    group.add(row);
+    return group;
+}
+
 class DevicePage {
-    constructor(rules, type, {title, iconName, groupTitle}) {
+    constructor(rules, type, {title, iconName, groupTitle, topGroup = null}) {
         this._rules = rules;
         this._type = type;
         this._rows = [];
 
         this.widget = new Adw.PreferencesPage({title, icon_name: iconName});
+        if (topGroup)
+            this.widget.add(topGroup);
         this._group = new Adw.PreferencesGroup({title: groupTitle, description: GROUP_DESCRIPTION});
         this.widget.add(this._group);
         this.rebuild();
